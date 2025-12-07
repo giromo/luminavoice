@@ -19,10 +19,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '18'
-          cache: 'npm'
+          # کش رو موقتاً خاموش کردیم تا بدون package-lock.json هم کار کنه
+          # بعد از اینکه package-lock.json رو کامیت کردی، دوباره این خط رو فعال کن:
+          # cache: 'npm'
 
       - name: Install Dependencies
-        run: npm ci
+        run: npm install
 
       - name: Build
         run: npm run build
