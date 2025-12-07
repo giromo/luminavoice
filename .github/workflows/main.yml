@@ -14,25 +14,25 @@ jobs:
     concurrency:
       group: ${{ github.workflow }}-${{ github.ref }}
     steps:
-      - name: Checkout 馃泿锔�
+      - name: Checkout 🛎️
         uses: actions/checkout@v3
 
-      - name: Setup Node.js 鈿欙笍
+      - name: Setup Node.js ⚙️
         uses: actions/setup-node@v3
         with:
           node-version: '18'
 
-      - name: Install Dependencies 馃敡
+      - name: Install Dependencies 🔧
         run: npm ci
 
-      - name: Build 馃彈锔�
+      - name: Build 🏗️
         run: npm run build
         env:
           # If you want to bake the API key into the build (Not recommended for public repos)
           # API_KEY: ${{ secrets.API_KEY }} 
           CI: false
 
-      - name: Deploy 馃殌
+      - name: Deploy 🚀
         uses: JamesIves/github-pages-deploy-action@v4
         with:
           folder: dist
