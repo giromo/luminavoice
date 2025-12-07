@@ -1,1 +1,5 @@
-
+{
+  "name": "LuminaVoice",
+  "description": "A professional, glassmorphic AI Text-to-Speech and Translation application featuring neon aesthetics, particle backgrounds, and high-quality voice synthesis.",
+  "requestFramePermissions": []
+}
