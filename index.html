@@ -1,0 +1,272 @@
+addEventListener('fetch', event => {
+  event.respondWith(handleRequest(event.request));
+});
+
+async function handleRequest(request) {
+  const url = new URL(request.url);
+
+  // صفحه اصلی
+  if (url.pathname === '/' || url.pathname === '') {
+    return new Response(html, {
+      headers: { 'Content-Type': 'text/html; charset=utf-8' }
+    });
+  }
+
+  // API پراکسی
+  if (url.pathname === '/api') {
+    const service = url.searchParams.get('service');
+    const inputUrl = url.searchParams.get('url');
+    let apiUrl;
+
+    // --- مدیریت سرویس‌ها ---
+    switch (service) {
+      case 'soundcloud':
+        if (!inputUrl) return new Response(JSON.stringify({ error: 'URL is required' }), { status: 400 });
+        apiUrl = `https://api.cactus-dev.ir/soundcloud?url=${encodeURIComponent(inputUrl)}`;
+        break;
+
+      case 'pinterest':
+        if (!inputUrl) return new Response(JSON.stringify({ error: 'URL is required' }), { status: 400 });
+        apiUrl = `https://api.cactus-dev.ir/pinterest/?url=${encodeURIComponent(inputUrl)}`;
+        break;
+
+      case 'youtube':
+        if (!inputUrl) return new Response(JSON.stringify({ error: 'URL is required' }), { status: 400 });
+
+        let cleanUrl = inputUrl.trim();
+        try {
+          const urlObj = new URL(cleanUrl);
+          // حذف پارامترهای اضافی مثل ?si=...
+          ['si', 'feature', 'pp', 'utm_source', 'utm_medium', 'utm_campaign'].forEach(p => {
+            urlObj.searchParams.delete(p);
+          });
+          cleanUrl = urlObj.toString();
+        } catch (e) {
+          // اگر URL نامعتبر بود، حداقل trim شده بفرست
+        }
+
+        apiUrl = `https://mionapi.ir/api/youtube/youtube.php?link=${encodeURIComponent(cleanUrl)}`;
+        break;
+
+      case 'instagram':
+        if (!inputUrl) return new Response(JSON.stringify({ error: 'URL is required' }), { status: 400 });
+        apiUrl = `https://api.cactus-dev.ir/instagram.php?url=${encodeURIComponent(inputUrl)}`;
+        break;
+
+      case 'radiojavan':
+        const s = url.searchParams.get('s') || '';
+        const page = url.searchParams.get('page') || '1';
+        const pid = url.searchParams.get('pid') || '';
+        
+        if (!s && !pid) {
+          return new Response(JSON.stringify({ error: 'At least "s" or "pid" is required for Radio Javan' }), { status: 400 });
+        }
+        
+        apiUrl = `https://api.cactus-dev.ir/mrjavan.php?s=${encodeURIComponent(s)}&page=${encodeURIComponent(page)}&pid=${encodeURIComponent(pid)}`;
+        break;
+
+      default:
+        return new Response(JSON.stringify({ error: 'Invalid service' }), { status: 400 });
+    }
+    // --- پایان switch ---
+
+    try {
+      const response = await fetch(apiUrl);
+
+      // اگر API خطا داد
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => 'Unknown error');
+        return new Response(JSON.stringify({ 
+          error: `API Error ${response.status}: ${errorText.substring(0, 200)}` 
+        }), { 
+          status: 502,
+          headers: { 'Content-Type': 'application/json; charset=utf-8' }
+        });
+      }
+
+      // استریم مستقیم پاسخ (بدون مصرف حافظه)
+      return new Response(response.body, {
+        headers: {
+          'Content-Type': response.headers.get('content-type') || 'application/json; charset=utf-8',
+          'Access-Control-Allow-Origin': '*'
+        }
+      });
+
+    } catch (error) {
+      return new Response(JSON.stringify({ 
+        error: 'Failed to fetch API: ' + error.message 
+      }), { 
+        status: 500,
+        headers: { 'Content-Type': 'application/json; charset=utf-8' }
+      });
+    }
+  }
+
+  return new Response('Not Found', { status: 404 });
+}
+
+// --- صفحه HTML کامل با UI بهبودیافته ---
+const html = `
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>دانلودر چندمنظوره</title>
+  <style>
+    body { font-family: Tahoma, Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; background: #f9f9f9; color: #333; }
+    h1 { text-align: center; color: #2c3e50; margin-bottom: 30px; }
+    label { display: block; margin: 15px 0 5px; font-weight: bold; color: #2c3e50; }
+    select, input, button { padding: 12px; margin: 8px 0; width: 100%; border: 1px solid #ddd; border-radius: 6px; font-size: 16px; box-sizing: border-box; }
+    select { background: white; }
+    button { background: #3498db; color: white; font-weight: bold; cursor: pointer; transition: 0.3s; border: none; }
+    button:hover:not(:disabled) { background: #2980b9; }
+    button:disabled { background: #95a5a6; cursor: not-allowed; }
+    #urlField, #radiojavanParams { transition: all 0.3s ease; overflow: hidden; }
+    pre { background: #2c3e50; color: #f1f1f1; padding: 15px; border-radius: 8px; overflow-x: auto; margin-top: 20px; font-size: 14px; white-space: pre-wrap; word-wrap: break-word; }
+    .loading { color: #3498db; font-style: italic; }
+    .error { color: #e74c3c; }
+    .success { color: #27ae60; }
+    .copy-btn { margin-top: 10px; padding: 8px 12px; background: #2ecc71; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; }
+    .copy-btn:hover { background: #27ae60; }
+  </style>
+</head>
+<body>
+  <h1>دانلودر چندمنظوره</h1>
+  
+  <label for="service">انتخاب سرویس:</label>
+  <select id="service" onchange="toggleFields()">
+    <option value="soundcloud">SoundCloud</option>
+    <option value="pinterest">Pinterest</option>
+    <option value="youtube">YouTube</option>
+    <option value="instagram">Instagram</option>
+    <option value="radiojavan">Radio Javan</option>
+  </select>
+
+  <div id="urlField">
+    <label for="url" id="urlLabel">لینک پست یا ویدیو:</label>
+    <input type="text" id="url" placeholder="مثلاً: https://youtu.be/415K9u00UQ8?si=..." oninput="updateSubmitButton()">
+  </div>
+
+  <div id="radiojavanParams" style="display: none;">
+    <label for="s">جستجو (نام آهنگ یا خواننده):</label>
+    <input type="text" id="s" placeholder="مثلاً: محسن یگانه" oninput="updateSubmitButton()">
+    
+    <label for="page">شماره صفحه (اختیاری):</label>
+    <input type="text" id="page" placeholder="مثلاً: 1" value="1" oninput="updateSubmitButton()">
+    
+    <label for="pid">شناسه موزیک (اختیاری):</label>
+    <input type="text" id="pid" placeholder="مثلاً: 123456" oninput="updateSubmitButton()">
+  </div>
+
+  <button id="submitBtn" onclick="fetchData()" disabled>دریافت اطلاعات</button>
+  
+  <h3>نتیجه:</h3>
+  <pre id="result">یک سرویس انتخاب کنید و اطلاعات را وارد کنید...</pre>
+  <button class="copy-btn" onclick="copyResult()" style="display: none;" id="copyBtn">کپی نتیجه</button>
+
+  <script>
+    function toggleFields() {
+      const service = document.getElementById('service').value;
+      const isRadioJavan = service === 'radiojavan';
+      
+      document.getElementById('urlField').style.display = isRadioJavan ? 'none' : 'block';
+      document.getElementById('radiojavanParams').style.display = isRadioJavan ? 'block' : 'none';
+      
+      if (isRadioJavan) {
+        document.getElementById('url').value = '';
+      } else {
+        document.getElementById('s').value = '';
+        document.getElementById('pid').value = '';
+        document.getElementById('page').value = '1';
+      }
+      
+      updateSubmitButton();
+    }
+
+    function updateSubmitButton() {
+      const service = document.getElementById('service').value;
+      const url = document.getElementById('url').value.trim();
+      const s = document.getElementById('s')?.value.trim() || '';
+      const pid = document.getElementById('pid')?.value.trim() || '';
+      
+      let valid = false;
+      if (service === 'radiojavan') {
+        valid = s.length > 0 || pid.length > 0;
+      } else {
+        valid = url.length > 0;
+      }
+      
+      document.getElementById('submitBtn').disabled = !valid;
+    }
+
+    async function fetchData() {
+      const resultEl = document.getElementById('result');
+      const copyBtn = document.getElementById('copyBtn');
+      const service = document.getElementById('service').value;
+      let apiUrl = '/api?service=' + service;
+
+      resultEl.textContent = 'در حال بارگذاری...';
+      resultEl.className = 'loading';
+      copyBtn.style.display = 'none';
+
+      try {
+        if (service !== 'radiojavan') {
+          const url = document.getElementById('url').value.trim();
+          if (!url) throw new Error('لینک الزامی است');
+          apiUrl += '&url=' + encodeURIComponent(url);
+        } else {
+          const s = document.getElementById('s').value.trim();
+          const page = document.getElementById('page').value.trim() || '1';
+          const pid = document.getElementById('pid').value.trim();
+          
+          if (s) apiUrl += '&s=' + encodeURIComponent(s);
+          if (page) apiUrl += '&page=' + encodeURIComponent(page);
+          if (pid) apiUrl += '&pid=' + encodeURIComponent(pid);
+        }
+
+        const response = await fetch(apiUrl);
+        const text = await response.text();
+
+        if (response.headers.get('content-type')?.includes('application/json')) {
+          try {
+            const data = JSON.parse(text);
+            resultEl.textContent = JSON.stringify(data, null, 2);
+            resultEl.className = 'success';
+            copyBtn.style.display = 'block';
+          } catch {
+            resultEl.textContent = text;
+            resultEl.className = 'error';
+          }
+        } else {
+          resultEl.textContent = text;
+          resultEl.className = 'error';
+        }
+      } catch (error) {
+        resultEl.textContent = 'خطا: ' + error.message;
+        resultEl.className = 'error';
+      }
+    }
+
+    function copyResult() {
+      const text = document.getElementById('result').textContent;
+      navigator.clipboard.writeText(text).then(() => {
+        const btn = document.getElementById('copyBtn');
+        const oldText = btn.textContent;
+        btn.textContent = 'کپی شد!';
+        setTimeout(() => { btn.textContent = oldText; }, 2000);
+      });
+    }
+
+    // راه‌اندازی اولیه
+    window.onload = () => {
+      toggleFields();
+      ['url', 's', 'page', 'pid'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('input', updateSubmitButton);
+      });
+    };
+  </script>
+</body>
+</html>
+`;
