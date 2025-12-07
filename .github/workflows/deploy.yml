@@ -21,9 +21,10 @@ jobs:
         uses: actions/setup-node@v3
         with:
           node-version: '18'
+          cache: 'npm'  # اضافه کردن cache برای سرعت بیشتر
 
       - name: Install Dependencies 🔧
-        run: npm install
+        run: npm ci  # استفاده از npm ci به جای install برای reproducibility
 
       - name: Build 🏗️
         run: npm run build
